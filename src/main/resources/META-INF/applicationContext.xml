@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:p="http://www.springframework.org/schema/p"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+                           http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-2.5.xsd
+                           http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-2.5.xsd">
+    <bean id="managerTemplate" abstract="true" lazy-init="true"
+          p:appDao-ref="appDao"
+          p:attendDao-ref="attendDao"
+          p:typeDao-ref="attendTypeDao"
+          p:checkDao-ref="checkDao"
+          p:empDao-ref="employeeDao"
+          p:mgrDao-ref="managerDao"
+          p:payDao-ref="payDao"/>
+    <bean id="empManager"
+          class="org.du.hrsystem.service.impl.EmpManagerImpl"
+          parent="managerTemplate"/>
+    <bean id="mgrManager"
+          class="org.du.hrsystem.service.impl.MgrManagerImpl"
+          parent="managerTemplate"/>
+
+    <!-- 配置Quartz -->
+    <bean id="cronTriggerPay" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean"
+          p:cronExpression="0 0 2 3 * ? *">
+        <property name="jobDetail">
+            <bean class="org.springframework.scheduling.quartz.JobDetailFactoryBean"
+                  p:jobClass="org.du.hrsystem.schedule.PayJob"
+                  p:durability="true">
+                <property name="jobDataAsMap">
+                    <map>
+                        <entry key="empMgr" value-ref="empManager"/>
+                    </map>
+                </property>
+            </bean>
+        </property>
+    </bean>
+    <bean id="cronTriggerPunch" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean"
+          p:cronExpression="0 0 7,12 ? * MON-FRI">
+        <property name="jobDetail">
+            <bean class="org.springframework.scheduling.quartz.JobDetailFactoryBean"
+                  p:jobClass="org.du.hrsystem.schedule.PunchJob"
+                  p:durability="true">
+                <property name="jobDataAsMap">
+                    <map>
+                        <entry key="empMgr" value-ref="empManager"/>
+                    </map>
+                </property>
+            </bean>
+        </property>
+    </bean>
+    <bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+        <property name="triggers">
+            <list>
+                <ref bean="cronTriggerPay"/>
+                <ref bean="cronTriggerPunch"/>
+            </list>
+        </property>
+    </bean>
+
+
+    <bean id="transactionManager" class="org.springframework.orm.hibernate5.HibernateTransactionManager"
+          p:sessionFactory-ref="sessionFactory"/>
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <!-- 对于get开头的方法使用只读事务 -->
+            <tx:method name="get*" read-only="true"/>
+            <!-- 其他方法采用默认的配置 -->
+            <tx:method name="*"/>
+        </tx:attributes>
+    </tx:advice>
+    <aop:config>
+        <aop:pointcut id="leePointcut"
+                      expression="bean(empManager)||bean(mgrManger)"/>
+        <aop:advisor advice-ref="txAdvice"
+                     pointcut-ref="leePointcut"/>
+    </aop:config>
+
+</beans>
